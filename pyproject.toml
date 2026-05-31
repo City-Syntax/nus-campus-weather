@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nus-campus-weather"
+version = "1.1.0"
+description = "Hourly meteorological data from 40 weather stations at NUS campus, Singapore (2025)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+    {name = "City Syntax Lab", email = "admin@citysyntax.io"},
+]
+maintainers = [
+    {name = "City Syntax Lab", email = "admin@citysyntax.io"},
+]
+keywords = ["meteorology", "weather", "urban climate", "Singapore", "NUS"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+]
+dependencies = [
+    "pandas>=1.5",
+    "numpy>=1.23",
+    "matplotlib>=3.6",
+    "seaborn>=0.12",
+    "pooch>=1.6",
+]
+
+[project.optional-dependencies]
+maps = ["contextily>=1.3"]
+full = ["contextily>=1.3"]
+
+[project.urls]
+Homepage = "https://github.com/City-Syntax/nus-campus-weather"
+Source = "https://github.com/City-Syntax/nus-campus-weather"
+"Bug Tracker" = "https://github.com/City-Syntax/nus-campus-weather/issues"
+Dataset = "https://github.com/City-Syntax/nus-campus-weather-paper"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["nus_campus_weather*"]

@@ -25,7 +25,7 @@ from ._plots  import (
     plot_imputation_examples,
 )
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 __all__ = [
     "set_data_dir",
     "get_data_dir",

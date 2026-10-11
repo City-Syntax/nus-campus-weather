@@ -3,13 +3,13 @@
 Python package for the **NUS Campus Meteorological Network** dataset — hourly observations from 40 automatic weather stations across the National University of Singapore (NUS) main campus, Singapore, for the full calendar year 2025.
 
 > **Dataset repo:** [nus-campus-weather-paper](https://github.com/City-Syntax/nus-campus-weather-paper)  
-> **PyPI:** `pip install nus-campus-weather` *(once published)*
+> **PyPI:** `pip install nus-campus-weather`
 
 ---
 
 ## 📦 Installation
 
-**From PyPI** *(once published)*:
+**From PyPI:**
 ```bash
 pip install nus-campus-weather
 ```
@@ -79,7 +79,24 @@ df = ncw.load_station("WS01")
 df = ncw.load_station("WS01", imputed=True)
 ```
 
-Each CSV has columns: `Datetime`, `Latitude`, `Longitude`, and six meteorological variables. Imputed files add a `_flag` column per variable (`0` = original, `1` = linear interpolation, `2` = XGBoost).
+Each CSV has columns: `Datetime`, `Latitude`, `Longitude`, `Elevation (m)`, `Type`, and six meteorological variables (plus `Rain Tot (mm)` at WS02, WS16, WS35). Imputed files add a `_flag` column per variable:
+
+| Flag | Meaning |
+|---|---|
+| `0` | Original observation |
+| `1` | Stage 1 linear interpolation (short gaps) |
+| `2` | Stage 2 XGBoost spatial regression |
+| `3` | Not measured / not imputed (left empty) |
+
+### Observed values only
+
+```python
+# Gap-filled file, but every filled value (flag 1-3) returned as NaN
+df  = ncw.load_station("WS01", imputed=True, observed_only=True)
+wsp = ncw.load_all(variable="WindSpeed Ave (m/s)", imputed=True, observed_only=True)
+```
+
+> ⚠️ **Wind:** gap-filled wind speed and direction have little skill at intra-campus scale. Use `observed_only=True` (or filter `flag == 0`) for wind analyses; the package warns if filled wind values are loaded.
 
 ### All 40 stations
 
@@ -95,7 +112,8 @@ long_df = ncw.load_all(imputed=True)
 
 ```python
 meta = ncw.station_metadata()
-# Returns a DataFrame indexed by station (WS01..WS40) with columns: lat, lon
+# Returns a DataFrame indexed by station (WS01..WS40) with columns:
+# lat, lon, elevation_m, type (Ground / Roof / Roof-3axis)
 ```
 
 ---
@@ -106,10 +124,10 @@ All plot functions use the data directory set via `set_data_dir()` and save figu
 
 | Function | Output |
 |---|---|
-| `ncw.plot_completeness()` | Bubble map (Fig 4) + monthly heatmap (Fig 5) |
-| `ncw.plot_climatology()` | Diurnal × seasonal climatology (Fig 6b) |
-| `ncw.plot_radials()` | Annual radial climatology, all variables (Fig 6a, 8a–f) |
-| `ncw.plot_imputation_examples()` | Representative gap-fill examples (Fig 10) |
+| `ncw.plot_completeness()` | Completeness bubble map and monthly heatmap (cf. paper Fig. 4) |
+| `ncw.plot_climatology()` | Diurnal × seasonal climatology (cf. paper Fig. 6) |
+| `ncw.plot_radials()` | Annual radial climatology, all variables (cf. paper Fig. 9) |
+| `ncw.plot_imputation_examples()` | Representative gap-fill examples (cf. paper Fig. 10) |
 
 ```python
 ncw.plot_completeness()
@@ -124,19 +142,22 @@ ncw.plot_imputation_examples()
 
 | Column | Units | Notes |
 |---|---|---|
-| `AirTemp Ave (C)` | °C | 2 m height |
-| `RelHum Ave (%)` | % | 2 m height |
+| `AirTemp Ave (C)` | °C | Ground stations 2–3 m above ground; 8 rooftop stations |
+| `RelHum Ave (%)` | % | |
 | `AtmPress Ave (hPa)` | hPa | |
-| `GlobalRad Ave (W/m2)` | W m⁻² | Global horizontal irradiance |
-| `WindSpeed Ave (m/s)` | m s⁻¹ | 2 m height |
+| `GlobalRad Ave (W/m2)` | W m⁻² | Global horizontal irradiance at the sensor, including local shading |
+| `WindSpeed Ave (m/s)` | m s⁻¹ | |
 | `WindDir Ave (degrees)` | ° | 0–360° |
 | `Rain Tot (mm)` | mm | WS02, WS16, WS35 only |
 
 ### ⚠️ Known issues
 
-- **WS17 atmospheric pressure** — faulty sensor; `AtmPress Ave (hPa)` is `NaN` in both raw and imputed files.
-- **WS38 global irradiance** — complete pyranometer failure; imputed values are spatially reconstructed, treat with caution.
-- **Wind speed/direction** — spatially decorrelated at intra-campus scale; use only flag = 0 observations for wind analyses.
+From dataset v1.1.0, faulty sensor values are removed by rule-based quality control; every removal is listed in `data_quality_assessment/qc_log.csv` of the dataset repository.
+
+- **Global irradiance not available (flag 3, not imputed)** at WS38 (no pyranometer, fully shaded site) and WS32, WS39 (pyranometers non-functional).
+- **Global irradiance removed for some months** at WS07, WS19, WS23 and WS26 (corrupted channel; spurious night-time readings).
+- **WS17** — pressure removed for January–April (faulty sensor) and wind for 20–26 December (sensor malfunction); these gaps are filled like any other.
+- **Wind speed/direction** — spatially decorrelated at intra-campus scale; use only flag = 0 observations for wind analyses (`observed_only=True`).
 
 ---
 
@@ -144,7 +165,9 @@ ncw.plot_imputation_examples()
 
 If you use this package or dataset, please cite:
 
-> [Authors]. *World's densest campus weather network: a 40-station hourly meteorological dataset from tropical Singapore.* Scientific Data [year]. DOI: [to be assigned]
+> Lim, J. et al. *An hourly meteorological dataset from a high-density 40-station campus weather network in tropical Singapore.* Scientific Data (under review).
+>
+> Dataset: Zenodo, https://doi.org/10.5281/zenodo.20477760 (all versions)
 
 ---
 

@@ -1,9 +1,24 @@
 import matplotlib.cm as cm
 import numpy as np
+from matplotlib import font_manager as _fm
 
-FONT           = "Palatino Linotype"
+
+def _pick_font(cands=("Palatino Linotype", "Palatino", "TeX Gyre Pagella",
+                      "URW Palladio L", "P052")):
+    """Palatino on Windows/macOS; metric-compatible clone elsewhere."""
+    have = {f.name for f in _fm.fontManager.ttflist}
+    return next((c for c in cands if c in have), "serif")
+
+
+FONT           = _pick_font()
 EXPECTED_HOURS = 8760
-PRESSURE_OUTLIER = "WS17"
+# Faulty WS17 pressure (Jan-Apr) is removed from dataset v1.1.0 onward, so no
+# station is excluded; set a station ID here to exclude one from pressure plots.
+PRESSURE_OUTLIER = ""
+
+# Provenance flags in the gap-filled files
+FLAG_OBSERVED, FLAG_LINEAR, FLAG_XGBOOST, FLAG_NOT_IMPUTED = 0, 1, 2, 3
+WIND_VARS = ("WindSpeed Ave (m/s)", "WindDir Ave (degrees)")
 
 _viridis = cm.viridis
 _vc = [_viridis(x) for x in np.linspace(0.08, 0.92, 6)]

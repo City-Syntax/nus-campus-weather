@@ -1,3 +1,4 @@
+import warnings
 import calendar
 import os
 
@@ -187,9 +188,8 @@ _RADIAL_CFG = {
     "WindSpeed Ave (m/s)":  dict(center=["Wind Speed", "(m/s)", "inner=min, outer=max"],
                                   line_label="Network daily mean",
                                   has_band=True, show_mean=True, daytime_only=False),
-    "AtmPress Ave (hPa)":   dict(center=["Atm. Pressure", "(hPa)", "WS17 excluded",
-                                          "inner=min, outer=max"],
-                                  line_label="Network daily mean (WS17 excl.)",
+    "AtmPress Ave (hPa)":   dict(center=["Atm. Pressure", "(hPa)", "inner=min, outer=max"],
+                                  line_label="Network daily mean",
                                   has_band=True, show_mean=True, daytime_only=False),
     "GlobalRad Ave (W/m2)": dict(center=["Solar Rad.", "(W/m\u00b2)", "inner=min, outer=max"],
                                   line_label="Daytime mean  07\u201318h",
@@ -269,9 +269,12 @@ def plot_completeness(save_dir: str = None):
     ax1.set_ylim(min(orig_lats) - pad_lat, max(orig_lats) + pad_lat)
 
     if ctx is not None:
-        ctx.add_basemap(ax1, crs="EPSG:4326",
-                        source=ctx.providers.CartoDB.Positron,
-                        alpha=0.45, zorder=0, attribution=False)
+        try:  # tiles need internet access; the map still renders without them
+            ctx.add_basemap(ax1, crs="EPSG:4326",
+                            source=ctx.providers.CartoDB.Positron,
+                            alpha=0.45, zorder=0, attribution=False)
+        except Exception as e:
+            warnings.warn(f"Basemap not drawn ({type(e).__name__}).", stacklevel=2)
 
     sc = ax1.scatter(orig_lons, orig_lats, s=sizes, c=vals,
                      cmap=MAKO, vmin=65, vmax=100,

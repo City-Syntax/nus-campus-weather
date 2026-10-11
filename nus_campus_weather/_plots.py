@@ -568,7 +568,7 @@ def plot_imputation_examples(save_path: str = None):
     VAR_LABEL = {
         "AirTemp Ave (C)":      "Air Temperature (\u00b0C)",
         "AtmPress Ave (hPa)":   "Atmospheric Pressure (hPa)",
-        "GlobalRad Ave (W/m2)": "Global Radiation (W m\u207b\u00b2)",
+        "GlobalRad Ave (W/m2)": "Global Radiation (W m$^{-2}$)",
     }
     FLAG_COL = {v: v.split()[0] + "_flag" for v in VAR_COLOR}
 
@@ -581,7 +581,10 @@ def plot_imputation_examples(save_path: str = None):
 
     def _load_pair(ws, var):
         orig_df = load_station(ws, imputed=False)
-        imp_df  = load_station(ws, imputed=True)
+        with warnings.catch_warnings():
+            # this figure shows no wind panel; skip the gap-filled-wind warning
+            warnings.simplefilter("ignore", UserWarning)
+            imp_df = load_station(ws, imputed=True)
         return orig_df[var], imp_df[var], imp_df[FLAG_COL[var]]
 
     def _longest_s2(flags):

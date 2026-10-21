@@ -4,7 +4,7 @@ _DATA_DIR = None
 
 
 def set_data_dir(path: str) -> None:
-    """Pin the loader to a local directory containing the NUS-WS CSV files.
+    """Pin the loader to a local directory containing the dataset CSV files.
 
     Use this when working from a local clone of the dataset repository
     (e.g. for development) instead of letting the package auto-fetch from

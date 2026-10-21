@@ -32,7 +32,7 @@ Optional (for map backgrounds): `contextily`
 import nus_campus_weather as ncw
 
 # Just use it — the dataset auto-downloads from Zenodo on first call
-# (~100 MB, one-time), then cached for future use.
+# (~120 MB, one-time), then cached for future use.
 df = ncw.load_station("WS01")
 fig = ncw.plot_climatology()
 ```
@@ -61,8 +61,8 @@ on Windows). Override with the `NUS_WEATHER_CACHE` environment variable.
 ### Dataset version
 
 ```python
-ncw.DATASET_VERSION   # '1.0.0'
-ncw.DATASET_DOI       # '10.5281/zenodo.20477761'
+ncw.DATASET_VERSION   # '1.1.0'
+ncw.DATASET_DOI       # '10.5281/zenodo.23535609'
 ```
 
 ---

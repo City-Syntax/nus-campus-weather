@@ -1,26 +1,25 @@
-"""Auto-fetch the NUS-WS dataset from Zenodo.
+"""Auto-fetch the NUS campus weather dataset from Zenodo.
 
 The dataset is published as a versioned Zenodo archive. On first use the
-zip is downloaded (~100 MB), checksum-verified, and unpacked into the user's
+zip is downloaded (~120 MB), checksum-verified, and unpacked into the user's
 platform cache directory. Subsequent calls return the cached path instantly.
 """
 
-import os
 from pathlib import Path
 
 import pooch
 
-# Zenodo record for nus-campus-weather-paper v1.0.0
-DATASET_VERSION = "1.0.0"
-DATASET_DOI = "10.5281/zenodo.20477761"
+# Zenodo record for nus-campus-weather-paper v1.1.0
+DATASET_VERSION = "1.1.0"
+DATASET_DOI = "10.5281/zenodo.23535609"
 DATASET_CONCEPT_DOI = "10.5281/zenodo.20477760"
 
-_ASSET = "City-Syntax/nus-campus-weather-paper-v1.0.0.zip"
-_REGISTRY = {_ASSET: "md5:6b8086799a57cfeb7f97f6b0abd99510"}
+_ASSET = "City-Syntax/nus-campus-weather-paper-v1.1.0.zip"
+_REGISTRY = {_ASSET: "md5:50f88f96ef3e1ce1a41087187f0b8a34"}
 
 _FETCHER = pooch.create(
     path=pooch.os_cache("nus_campus_weather"),
-    base_url="https://zenodo.org/records/20477761/files/",
+    base_url="https://zenodo.org/records/23535609/files/",
     version=DATASET_VERSION,
     env="NUS_WEATHER_CACHE",
     registry=_REGISTRY,
@@ -28,7 +27,7 @@ _FETCHER = pooch.create(
 
 
 def fetch_dataset(verbose: bool = True) -> str:
-    """Download (or return cached path to) the NUS-WS dataset.
+    """Download (or return cached path to) the NUS campus weather dataset.
 
     Returns
     -------
@@ -38,7 +37,7 @@ def fetch_dataset(verbose: bool = True) -> str:
 
     Notes
     -----
-    The first call downloads ~100 MB from Zenodo (DOI 10.5281/zenodo.20477761)
+    The first call downloads ~120 MB from Zenodo (DOI 10.5281/zenodo.23535609)
     into the user's platform cache directory. Subsequent calls return the
     cached path instantly. Override the cache location with the
     ``NUS_WEATHER_CACHE`` environment variable.
@@ -46,7 +45,7 @@ def fetch_dataset(verbose: bool = True) -> str:
     if verbose and not _is_cached():
         print(
             f"nus_campus_weather: downloading dataset v{DATASET_VERSION} "
-            f"from Zenodo (DOI {DATASET_DOI}, ~100 MB, one-time)..."
+            f"from Zenodo (DOI {DATASET_DOI}, ~120 MB, one-time)..."
         )
     extracted = _FETCHER.fetch(_ASSET, processor=pooch.Unzip())
 

@@ -444,7 +444,11 @@ def plot_climatology(save_path: str = None):
 
 
 def plot_radials(save_path: str = None):
-    """Annual radial climatology for all six variables (Fig 6a style).
+    """Annual radial climatology for five variables (paper Fig. 9).
+
+    Wind direction is not included: it is shown station by station in the
+    paper's wind-rose map (Fig. 8), because a network-pooled rose is not
+    meaningful at intra-campus scale.
 
     Each panel shows hourly observations plotted by day-of-year on a polar
     axis, with the network-wide daily mean and ±1 s.d. band overlaid.
@@ -468,29 +472,17 @@ def plot_radials(save_path: str = None):
     long_df["hour"] = long_df.index.hour
     long_df["doy"]  = long_df.index.dayofyear
 
-    fig, axs = plt.subplots(2, 3, figsize=(18, 13),
-                             subplot_kw={"projection": "polar"})
+    from matplotlib.gridspec import GridSpec
+    fig = plt.figure(figsize=(18, 13))
     fig.patch.set_facecolor("white")
+    gs = GridSpec(2, 6, figure=fig)
+    slots = [gs[0, 0:2], gs[0, 2:4], gs[0, 4:6], gs[1, 1:3], gs[1, 3:5]]
+    axs = [fig.add_subplot(sl, projection="polar") for sl in slots]
+    radial_vars = [v for v in VARS if v[0] != "WindDir Ave (degrees)"]
 
-    for ax, (col, label, unit, lc, _) in zip(axs.flat, VARS):
+    for ax, (col, label, unit, lc, _) in zip(axs, radial_vars):
         cfg = _RADIAL_CFG[col]
         src = long_df.copy()
-
-        if col == "WindDir Ave (degrees)":
-            _draw_wind_rose(ax, src)
-            wr_handles = [
-                mpatches.Patch(facecolor=_HOUR_CMAP(0.0),     alpha=0.88, label="00h (midnight)"),
-                mpatches.Patch(facecolor=_HOUR_CMAP(12 / 23), alpha=0.88, label="12h (noon)"),
-                mpatches.Patch(facecolor=_HOUR_CMAP(18 / 23), alpha=0.88, label="18h (dusk)"),
-            ]
-            ax.legend(handles=wr_handles,
-                      title="Stacked by hour", title_fontsize=5.0,
-                      bbox_to_anchor=(0.5, -0.03), loc="upper center",
-                      fontsize=5.2, framealpha=0.92, edgecolor="#dddddd",
-                      fancybox=False, ncol=3, columnspacing=0.5,
-                      handlelength=0.9, handletextpad=0.4, borderpad=0.4,
-                      prop={"family": FONT})
-            continue
 
         grp_m = src.groupby(["doy", "hour"])[col].mean().reset_index()
         grp_s = src.groupby(["doy", "hour"])[col].std().reset_index()
@@ -526,9 +518,9 @@ def plot_radials(save_path: str = None):
     # Shared hour-of-day colorbar
     sm = plt.cm.ScalarMappable(cmap=_HOUR_CMAP, norm=Normalize(vmin=0, vmax=23))
     sm.set_array([])
-    cbar = fig.colorbar(sm, ax=axs.ravel().tolist(),
+    cbar = fig.colorbar(sm, ax=axs,
                         orientation="horizontal", fraction=0.025,
-                        pad=0.04, aspect=50)
+                        pad=0.08, aspect=50)
     cbar.set_label("Hour of Day", fontsize=9, fontfamily=FONT, labelpad=5)
     cbar.set_ticks([0, 6, 12, 18, 23])
     cbar.set_ticklabels(["00h", "06h", "12h", "18h", "23h"])

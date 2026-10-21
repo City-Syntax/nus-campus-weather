@@ -126,7 +126,7 @@ All plot functions use the data directory set via `set_data_dir()` and save figu
 |---|---|
 | `ncw.plot_completeness()` | Completeness bubble map and monthly heatmap (cf. paper Fig. 4) |
 | `ncw.plot_climatology()` | Diurnal × seasonal climatology (cf. paper Fig. 6) |
-| `ncw.plot_radials()` | Annual radial climatology, all variables (cf. paper Fig. 9) |
+| `ncw.plot_radials()` | Annual radial climatology, five variables (cf. paper Fig. 9) |
 | `ncw.plot_imputation_examples()` | Representative gap-fill examples (cf. paper Fig. 10) |
 
 ```python

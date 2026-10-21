@@ -146,8 +146,8 @@ ncw.plot_imputation_examples()
 | `RelHum Ave (%)` | % | |
 | `AtmPress Ave (hPa)` | hPa | |
 | `GlobalRad Ave (W/m2)` | W m⁻² | Global horizontal irradiance at the sensor, including local shading |
-| `WindSpeed Ave (m/s)` | m s⁻¹ | |
-| `WindDir Ave (degrees)` | ° | 0–360° |
+| `WindSpeed Ave (m/s)` | m s⁻¹ | Hourly vector mean (magnitude of the mean wind vector) |
+| `WindDir Ave (degrees)` | ° | Hourly vector mean, 0–360° |
 | `Rain Tot (mm)` | mm | WS02, WS16, WS35 only |
 
 ### ⚠️ Known issues

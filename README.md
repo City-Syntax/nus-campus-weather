@@ -160,7 +160,7 @@ From dataset v1.1.0, faulty sensor values are removed by rule-based quality cont
 - **WS17** — pressure removed for January–April (faulty sensor) and wind for 20–26 December (sensor malfunction); these gaps are filled like any other.
 - **Wind speed/direction** — spatially decorrelated at intra-campus scale; use only flag = 0 observations for wind analyses (`observed_only=True`).
 - **Daytime air temperature** — the naturally ventilated radiation shields read high in strong sunshine and light wind. 294 hourly values above 37.0 °C at 15 stations (163 at WS22) are flagged 4; other midday readings in strong sun and light wind, at ground and rooftop stations, can also read high.
-- **Rainfall (WS02, WS16, WS35)** — dataset v1.2.0 doubles all rainfall values: the loggers counted each tip of the 0.2-mm gauge as 0.1 mm, so v1.0.0 and v1.1.0 hold half the true rainfall. From v1.2.0, rainfall is also missing (flag 3) during logger outages; earlier versions stored these hours as 0 mm.
+- **Rainfall (WS02, WS16, WS35)** — dataset v1.2.0 doubles all rainfall values: v1.0.0 and v1.1.0 hold about half the rainfall at nearby Meteorological Service Singapore gauges, most likely because each 0.2-mm tip was logged as 0.1 mm. From v1.2.0, rainfall is also missing (flag 3) during logger outages; earlier versions stored these hours as 0 mm.
 
 ---
 

@@ -61,8 +61,8 @@ on Windows). Override with the `NUS_WEATHER_CACHE` environment variable.
 ### Dataset version
 
 ```python
-ncw.DATASET_VERSION   # '1.1.0'
-ncw.DATASET_DOI       # '10.5281/zenodo.23535609'
+ncw.DATASET_VERSION   # '1.2.0'
+ncw.DATASET_DOI       # '10.5281/zenodo.24040853'
 ```
 
 ---

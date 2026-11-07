@@ -9,17 +9,17 @@ from pathlib import Path
 
 import pooch
 
-# Zenodo record for nus-campus-weather-paper v1.1.0
-DATASET_VERSION = "1.1.0"
-DATASET_DOI = "10.5281/zenodo.23535609"
+# Zenodo record for nus-campus-weather-paper v1.2.0
+DATASET_VERSION = "1.2.0"
+DATASET_DOI = "10.5281/zenodo.24040853"
 DATASET_CONCEPT_DOI = "10.5281/zenodo.20477760"
 
-_ASSET = "City-Syntax/nus-campus-weather-paper-v1.1.0.zip"
-_REGISTRY = {_ASSET: "md5:50f88f96ef3e1ce1a41087187f0b8a34"}
+_ASSET = "City-Syntax/nus-campus-weather-paper-v1.2.0.zip"
+_REGISTRY = {_ASSET: "md5:4458929b1051a09f639d72660a51fa38"}
 
 _FETCHER = pooch.create(
     path=pooch.os_cache("nus_campus_weather"),
-    base_url="https://zenodo.org/records/23535609/files/",
+    base_url="https://zenodo.org/records/24040853/files/",
     version=DATASET_VERSION,
     env="NUS_WEATHER_CACHE",
     registry=_REGISTRY,
@@ -37,7 +37,7 @@ def fetch_dataset(verbose: bool = True) -> str:
 
     Notes
     -----
-    The first call downloads ~120 MB from Zenodo (DOI 10.5281/zenodo.23535609)
+    The first call downloads ~120 MB from Zenodo (DOI 10.5281/zenodo.24040853)
     into the user's platform cache directory. Subsequent calls return the
     cached path instantly. Override the cache location with the
     ``NUS_WEATHER_CACHE`` environment variable.

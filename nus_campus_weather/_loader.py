@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 from ._config import get_data_dir
-from ._constants import FLAG_OBSERVED, WIND_VARS
+from ._constants import OBSERVED_FLAGS, WIND_VARS
 
 _META_CACHE = None
 _FILE_GLOB  = "NUS_CAMPUS_WS*_2025_Hourly.csv"
@@ -31,13 +31,13 @@ def _flag_col(var: str) -> str:
 
 
 def _apply_observed_only(df: pd.DataFrame) -> pd.DataFrame:
-    """Set every value that is not an original observation (flag != 0) to NaN."""
+    """Set every value that is not an original observation (flag not 0 or 4) to NaN."""
     df = df.copy()
     for col in list(df.columns):
         fcol = _flag_col(col)
         if col.endswith("_flag") or fcol not in df.columns:
             continue
-        df.loc[df[fcol] != FLAG_OBSERVED, col] = np.nan
+        df.loc[~df[fcol].isin(OBSERVED_FLAGS), col] = np.nan
     return df
 
 
@@ -46,7 +46,7 @@ def _warn_wind(df: pd.DataFrame) -> None:
     if _WIND_WARNED:
         return
     flagged = [v for v in WIND_VARS
-               if _flag_col(v) in df.columns and (df[_flag_col(v)] != FLAG_OBSERVED).any()]
+               if _flag_col(v) in df.columns and df[_flag_col(v)].isin((1, 2)).any()]
     if flagged:
         warnings.warn(
             "Gap-filled wind values (flag 1-2) are included. Wind is poorly predicted "
@@ -90,14 +90,19 @@ def load_station(station: str, imputed: bool = False,
     observed_only : bool
         With ``imputed=True``, return only original observations: values with
         flag 1 (linear interpolation), 2 (XGBoost) or 3 (not imputed) are set
-        to NaN. Recommended for wind analyses.
+        to NaN. Observed air temperatures above 37.0 C (flag 4) are kept;
+        drop them with ``df[df['AirTemp_flag'] != 4]`` if needed.
+        Recommended for wind analyses.
 
     Returns
     -------
     pd.DataFrame
         Index = Datetime, columns = meteorological variables + flag columns
         (flag columns only present in imputed files; 0 = observed,
-        1 = linear interpolation, 2 = XGBoost, 3 = not measured / not imputed).
+        1 = linear interpolation, 2 = XGBoost, 3 = not measured / not imputed,
+        4 = observed air temperature above 37.0 C, probable radiation error).
+        Raw files hold logged hours only (six stations lack some hours);
+        imputed files cover all 8,760 hours of 2025.
     """
     data_dir = get_data_dir()
     fname    = f"NUS_CAMPUS_{station}_2025_Hourly{'_imputed' if imputed else ''}.csv"
@@ -129,8 +134,8 @@ def load_all(variable: str = None, imputed: bool = False,
     stations : list of str, optional
         Subset of station IDs to load.
     observed_only : bool
-        With ``imputed=True``, keep only original observations (flag 0); all
-        filled values are set to NaN. Recommended for wind analyses.
+        With ``imputed=True``, keep only original observations (flags 0 and 4);
+        all filled values are set to NaN. Recommended for wind analyses.
 
     Returns
     -------

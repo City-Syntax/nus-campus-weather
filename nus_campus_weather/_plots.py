@@ -623,7 +623,7 @@ def plot_imputation_examples(save_path: str = None):
         ax.plot(t[gap_mask], imp_w[gap_mask], color=col_obs, lw=1.3,
                 linestyle="--", alpha=0.85, zorder=2)
 
-        obs_plot = obs_w.copy().where(fl_w == 0)
+        obs_plot = obs_w.copy().where(fl_w.isin([0, 4]))
         ax.plot(t, obs_plot, color=col_obs, lw=1.5, linestyle="-", zorder=3)
 
         ax.set_ylabel(VAR_LABEL[var], fontsize=8.5)

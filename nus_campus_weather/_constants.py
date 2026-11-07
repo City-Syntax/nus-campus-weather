@@ -16,8 +16,14 @@ EXPECTED_HOURS = 8760
 # station is excluded; set a station ID here to exclude one from pressure plots.
 PRESSURE_OUTLIER = ""
 
-# Provenance flags in the gap-filled files
+# Provenance flags in the gap-filled files (dataset v1.2.0 onward):
+# 0 observed, 1 linear interpolation, 2 XGBoost, 3 not measured / not imputed,
+# 4 observed air temperature above 37.0 C (Singapore's highest recorded
+# temperature; probable radiation error, value kept). Rainfall (WS02, WS16,
+# WS35) has Rain_flag 0 (observed) or 3 (missing) and is not gap-filled.
 FLAG_OBSERVED, FLAG_LINEAR, FLAG_XGBOOST, FLAG_NOT_IMPUTED = 0, 1, 2, 3
+FLAG_OBSERVED_HIGH = 4
+OBSERVED_FLAGS = (FLAG_OBSERVED, FLAG_OBSERVED_HIGH)
 WIND_VARS = ("WindSpeed Ave (m/s)", "WindDir Ave (degrees)")
 
 _viridis = cm.viridis

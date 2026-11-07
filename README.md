@@ -79,19 +79,20 @@ df = ncw.load_station("WS01")
 df = ncw.load_station("WS01", imputed=True)
 ```
 
-Each CSV has columns: `Datetime`, `Latitude`, `Longitude`, `Elevation (m)`, `Type`, and six meteorological variables (plus `Rain Tot (mm)` at WS02, WS16, WS35). Imputed files add a `_flag` column per variable:
+Each CSV has columns: `Datetime`, `Latitude`, `Longitude`, `Elevation (m)`, `Type`, and six meteorological variables (plus `Rain Tot (mm)` at WS02, WS16, WS35). Raw files hold the hours the station logged (six stations lack 810 hours in total); imputed files cover all 8,760 hours of 2025 and add a `_flag` column per variable, including `Rain_flag` at the three rain-gauge stations:
 
 | Flag | Meaning |
 |---|---|
 | `0` | Original observation |
 | `1` | Stage 1 linear interpolation (short gaps) |
 | `2` | Stage 2 XGBoost spatial regression |
-| `3` | Not measured / not imputed (left empty) |
+| `3` | Not measured / not imputed (left empty); rainfall is never gap-filled |
+| `4` | Original air-temperature observation above 37.0 °C (Singapore's highest recorded temperature); kept, but probably includes radiation error |
 
 ### Observed values only
 
 ```python
-# Gap-filled file, but every filled value (flag 1-3) returned as NaN
+# Gap-filled file, but every filled value (flag 1-3) returned as NaN; flag 4 values are kept
 df  = ncw.load_station("WS01", imputed=True, observed_only=True)
 wsp = ncw.load_all(variable="WindSpeed Ave (m/s)", imputed=True, observed_only=True)
 ```
@@ -158,6 +159,8 @@ From dataset v1.1.0, faulty sensor values are removed by rule-based quality cont
 - **Global irradiance removed for some months** at WS07, WS19, WS23 and WS26 (corrupted channel; spurious night-time readings).
 - **WS17** — pressure removed for January–April (faulty sensor) and wind for 20–26 December (sensor malfunction); these gaps are filled like any other.
 - **Wind speed/direction** — spatially decorrelated at intra-campus scale; use only flag = 0 observations for wind analyses (`observed_only=True`).
+- **Daytime air temperature** — the naturally ventilated radiation shields read high in strong sunshine and light wind. 294 hourly values above 37.0 °C at 15 stations (163 at WS22) are flagged 4; other midday readings at ground stations in strong sun and light wind can also read high.
+- **Rainfall (WS02, WS16, WS35)** — missing (flag 3) during logger outages from dataset v1.2.0 onward; earlier versions stored these hours as 0 mm.
 
 ---
 

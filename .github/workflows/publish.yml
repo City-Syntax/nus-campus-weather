@@ -34,3 +34,5 @@ jobs:
           test "v$v" = "$GITHUB_REF_NAME"
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true   # re-running for a version already on PyPI is a no-op

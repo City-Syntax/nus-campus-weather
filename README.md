@@ -121,21 +121,23 @@ meta = ncw.station_metadata()
 
 ## 📊 Plot Functions
 
-All plot functions use the data directory set via `set_data_dir()` and save figures to a `figures/` subfolder within it.
+Each function reproduces a figure of the paper and returns the matplotlib figure. Pass `save_dir` or `save_path` to save it; missing folders are created.
 
 | Function | Output |
 |---|---|
-| `ncw.plot_completeness()` | Completeness bubble map and monthly heatmap (cf. paper Fig. 4) |
-| `ncw.plot_climatology()` | Diurnal × seasonal climatology (cf. paper Fig. 6) |
-| `ncw.plot_radials()` | Annual radial climatology, five variables (cf. paper Fig. 9) |
-| `ncw.plot_imputation_examples()` | Representative gap-fill examples (cf. paper Fig. 10) |
+| `ncw.plot_completeness()` | Monthly completeness heatmap (paper Fig. 4), plus a bubble map of completeness by station |
+| `ncw.plot_climatology()` | Diurnal × seasonal climatology, ground-level and rooftop stations (paper Fig. 6) |
+| `ncw.plot_radials()` | Annual radials for five variables, network mean (paper Fig. 9) |
+| `ncw.plot_imputation_examples()` | Representative gap-fill examples (paper Fig. 10) |
 
 ```python
-ncw.plot_completeness()
-ncw.plot_climatology()
-ncw.plot_radials()
-ncw.plot_imputation_examples()
+ncw.plot_completeness(save_dir='figures')                    # Figure 4
+ncw.plot_climatology(save_path='figures/Fig6.png')           # Figure 6
+ncw.plot_radials(save_path='figures/Fig9.png')               # Figure 9
+ncw.plot_imputation_examples(save_path='figures/Fig10.png')  # Figure 10
 ```
+
+From version 1.3.1 these match the figures in the paper; earlier versions drew older layouts of Figures 4, 6 and 9, and needed the output folder to exist.
 
 ---
 

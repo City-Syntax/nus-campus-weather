@@ -29,9 +29,12 @@ def _apply_style():
     plt.rcParams.update(RCPARAMS)
 
 
-def _save(fig, save_path):
+def _save(fig, save_path, dpi=300):
+    """Save *fig* to *save_path*, creating the folder if needed."""
     if save_path:
-        fig.savefig(save_path, dpi=200, bbox_inches="tight")
+        folder = os.path.dirname(os.path.abspath(save_path))
+        os.makedirs(folder, exist_ok=True)
+        fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
 
 
 # ── Radial helpers ────────────────────────────────────────────────────────────
@@ -145,11 +148,12 @@ def _draw_wind_rose(ax, src_df, n_sectors=16):
 
 
 def _draw_radial(ax, doy, hour, val, vmin, vmax, lc,
-                 std=None, show_mean=True, mean_mask=None, mean_color=None):
+                 std=None, s=0.9, alpha=0.68,
+                 show_mean=True, mean_mask=None, mean_color=None):
     thetas = _doy_to_theta(doy)
     r      = _to_radius(val, vmin, vmax)
     ax.scatter(thetas, r, c=hour, cmap=_HOUR_CMAP, vmin=0, vmax=23,
-               s=0.9, alpha=0.68, lw=0, zorder=3, rasterized=True)
+               s=s, alpha=alpha, lw=0, zorder=3, rasterized=True)
 
     if show_mean or (std is not None):
         df_tmp = pd.DataFrame({
@@ -173,6 +177,10 @@ def _draw_radial(ax, doy, hour, val, vmin, vmax, lc,
             ax.plot(t_loop, _to_radius(mv_loop, vmin, vmax),
                     color=mean_color if mean_color is not None else lc,
                     lw=0.9, alpha=0.85, zorder=4)
+
+    # white inner disc keeps the centre clear for the label
+    tc = np.linspace(0, 2 * np.pi, 360)
+    ax.fill(tc, np.full(360, _R_IN), color="white", zorder=5)
 
     tc = np.linspace(0, 2 * np.pi, 360)
     ax.fill(tc, np.full(360, _R_IN), color="white", zorder=5)
@@ -206,13 +214,79 @@ _RADIAL_CFG = {
 # Public plot functions
 # ─────────────────────────────────────────────────────────────────────────────
 
+_COMPLETENESS_VARS = [
+    "WindSpeed Ave (m/s)", "WindDir Ave (degrees)", "AirTemp Ave (C)",
+    "RelHum Ave (%)", "AtmPress Ave (hPa)", "GlobalRad Ave (W/m2)",
+]
+
+
+def _spread_positions(orig_lons, orig_lats,
+                      min_dist=0.0010, max_disp=0.0009, iterations=300):
+    """Nudge overlapping bubbles apart (display only; data are unchanged)."""
+    lons = np.array(orig_lons, dtype=float); lats = np.array(orig_lats, dtype=float)
+    olons = lons.copy(); olats = lats.copy()
+    n = len(lons)
+    for _ in range(iterations):
+        for i in range(n):
+            for j in range(i + 1, n):
+                dlon = lons[j] - lons[i]; dlat = lats[j] - lats[i]
+                dist = np.sqrt(dlon**2 + dlat**2)
+                if 0 < dist < min_dist:
+                    push = (min_dist - dist) / dist * 0.4
+                    lons[i] -= dlon * push / 2; lats[i] -= dlat * push / 2
+                    lons[j] += dlon * push / 2; lats[j] += dlat * push / 2
+        for i in range(n):
+            disp = np.sqrt((lons[i] - olons[i])**2 + (lats[i] - olats[i])**2)
+            if disp > max_disp:
+                angle = np.arctan2(lats[i] - olats[i], lons[i] - olons[i])
+                lons[i] = olons[i] + max_disp * np.cos(angle)
+                lats[i] = olats[i] + max_disp * np.sin(angle)
+    return lons, lats
+
+
+def _completeness_tables():
+    """Mean per-variable completeness of the raw data, per station and per month.
+
+    Same metric as Tables 2 and 4 of the paper: for each station, the share of
+    the expected hours with a value, averaged over the six variables (five at
+    WS38, which has no pyranometer).
+    """
+    long_df = load_all()
+    if not isinstance(long_df.index, pd.DatetimeIndex):
+        long_df.index = pd.to_datetime(long_df.index)
+    meta = station_metadata()
+    stations = sorted(long_df["station"].unique())
+    overall, monthly = {}, {}
+    for ws in stations:
+        sub = long_df[long_df["station"] == ws]
+        cols = [c for c in _COMPLETENESS_VARS if c in sub.columns]
+        if ws == "WS38":
+            cols = [c for c in cols if c != "GlobalRad Ave (W/m2)"]
+        overall[ws] = np.mean([sub[c].notna().sum() / EXPECTED_HOURS * 100 for c in cols])
+        months = sub.index.month
+        row = {}
+        for m in range(1, 13):
+            expected = calendar.monthrange(2025, m)[1] * 24
+            part = sub[months == m]
+            pct = np.mean([part[c].notna().sum() / expected * 100 for c in cols])
+            row[m] = round(min(pct, 100), 2)
+        monthly[ws] = row
+    return stations, meta, overall, monthly
+
+
 def plot_completeness(save_dir: str = None):
-    """Bubble map and monthly completeness heatmap.
+    """Data completeness of the raw dataset (paper Fig. 4).
+
+    Draws the monthly completeness heatmap of Fig. 4 (stations along the x-axis,
+    with an "Overall" row) and a supplementary bubble map of overall
+    completeness by station location. Completeness is the mean per-variable
+    completeness used in the paper.
 
     Parameters
     ----------
     save_dir : str, optional
-        Directory to save PNG files. Filenames are auto-generated.
+        Folder to save ``completeness_heat.png`` (Fig. 4) and
+        ``completeness_map.png``; it is created if it does not exist.
 
     Returns
     -------
@@ -222,223 +296,191 @@ def plot_completeness(save_dir: str = None):
         import contextily as ctx
     except ImportError:
         ctx = None
-
-    _apply_style()
     import copy
     from matplotlib.patches import Patch
     from matplotlib.ticker import FormatStrFormatter
 
+    _apply_style()
     MAKO = sns.color_palette("mako", as_cmap=True)
+    stations, meta, overall, monthly = _completeness_tables()
 
-    # ── Load ─────────────────────────────────────────────────────────────────
-    long_df  = load_all()
-    meta     = station_metadata()
-    stations = sorted(long_df["station"].unique())
-    VAR_COLS = [v[0] for v in VARS if v[0] in long_df.columns]
-
-    station_meta_local = {}
-    monthly_data       = {}
-
-    for ws in stations:
-        sub  = long_df[long_df["station"] == ws]
-        lat  = meta.loc[ws, "lat"]
-        lon  = meta.loc[ws, "lon"]
-        overall = sub[VAR_COLS].notna().all(axis=1).sum() / EXPECTED_HOURS * 100
-        station_meta_local[ws] = {"lat": lat, "lon": lon, "overall": overall}
-
-        sub = sub.copy()
-        sub["month"] = pd.to_datetime(sub.index).month if not isinstance(sub.index, pd.DatetimeIndex) else sub.index.month
-        monthly = {}
-        for m in range(1, 13):
-            expected = calendar.monthrange(2025, m)[1] * 24
-            pct = sub[sub["month"] == m]["AirTemp Ave (C)"].notna().sum() / expected * 100
-            monthly[m] = round(min(pct, 100), 2)
-        monthly_data[ws] = monthly
-
-    orig_lons = [station_meta_local[ws]["lon"] for ws in stations]
-    orig_lats = [station_meta_local[ws]["lat"] for ws in stations]
-    vals      = [station_meta_local[ws]["overall"] for ws in stations]
+    # ── Bubble map (supplementary) ───────────────────────────────────────────
+    orig_lons = [meta.loc[ws, "lon"] for ws in stations]
+    orig_lats = [meta.loc[ws, "lat"] for ws in stations]
+    vals      = [overall[ws] for ws in stations]
     sizes     = [max(((v / 100) ** 2.2) * 700 + 65, 220) for v in vals]
+    plot_lons, plot_lats = _spread_positions(orig_lons, orig_lats)
 
-    # ── Fig 1 — Bubble Map ────────────────────────────────────────────────────
     fig_map, ax1 = plt.subplots(figsize=(11, 9))
     fig_map.patch.set_facecolor("white")
-
-    pad_lon, pad_lat = 0.004, 0.004
-    ax1.set_xlim(min(orig_lons) - pad_lon, max(orig_lons) + pad_lon)
-    ax1.set_ylim(min(orig_lats) - pad_lat, max(orig_lats) + pad_lat)
-
+    pad = 0.004
+    ax1.set_xlim(min(orig_lons) - pad, max(orig_lons) + pad)
+    ax1.set_ylim(min(orig_lats) - pad, max(orig_lats) + pad)
     if ctx is not None:
         try:  # tiles need internet access; the map still renders without them
-            ctx.add_basemap(ax1, crs="EPSG:4326",
-                            source=ctx.providers.CartoDB.Positron,
+            ctx.add_basemap(ax1, crs="EPSG:4326", source=ctx.providers.CartoDB.Positron,
                             alpha=0.45, zorder=0, attribution=False)
         except Exception as e:
             warnings.warn(f"Basemap not drawn ({type(e).__name__}).", stacklevel=2)
-
-    sc = ax1.scatter(orig_lons, orig_lats, s=sizes, c=vals,
-                     cmap=MAKO, vmin=65, vmax=100,
-                     edgecolors="white", linewidths=0.9,
-                     zorder=3, alpha=0.88)
-
-    for lon, lat, ws, val in zip(orig_lons, orig_lats, stations, vals):
-        txt_col = "white" if val < 88 else "#1a1a1a"
-        ax1.text(lon, lat, f"#{ws.replace('WS','')}\n{val:.0f}%",
-                 ha="center", va="center", zorder=5,
-                 fontsize=5.2, fontweight="bold", linespacing=1.35,
-                 color=txt_col, fontfamily=FONT)
-
+    sc = ax1.scatter(plot_lons, plot_lats, s=sizes, c=vals, cmap=MAKO, vmin=65, vmax=100,
+                     edgecolors="white", linewidths=0.9, zorder=3, alpha=0.88)
+    for lon, lat, ws, val in zip(plot_lons, plot_lats, stations, vals):
+        ax1.text(lon, lat, f"#{ws.replace('WS', '')}\n{val:.0f}%", ha="center", va="center",
+                 zorder=5, fontsize=5.2, fontweight="bold", linespacing=1.35,
+                 color="white" if val < 88 else "#1a1a1a", fontfamily=FONT)
     cbar = fig_map.colorbar(sc, ax=ax1, fraction=0.028, pad=0.02, aspect=30)
-    cbar.set_label("Overall Data Completeness (%)", fontsize=10,
+    cbar.set_label("Mean per-variable completeness (%)", fontsize=10,
                    fontfamily=FONT, labelpad=10)
     cbar.ax.tick_params(labelsize=8.5)
-
-    leg_handles = [
-        ax1.scatter([], [], s=((p/100)**2.2)*700+65, c="#888888",
-                    alpha=0.7, edgecolors="white", linewidths=0.8)
-        for p in [75, 88, 100]
-    ]
-    ax1.legend(leg_handles, ["75%", "88%", "100%"],
-               title="Completeness", title_fontsize=9,
-               fontsize=8.5, loc="upper left", framealpha=0.93,
-               edgecolor="#cccccc", fancybox=False,
-               labelspacing=1.8, handletextpad=1.4, borderpad=1.1)
+    for sp in cbar.ax.spines.values():
+        sp.set_linewidth(0.5)
+    leg_handles = [ax1.scatter([], [], s=((p / 100) ** 2.2) * 700 + 65, c="#888888",
+                               alpha=0.7, edgecolors="white", linewidths=0.8)
+                   for p in [75, 88, 100]]
+    leg = ax1.legend(leg_handles, ["75%", "88%", "100%"], title="Completeness",
+                     title_fontsize=9, fontsize=8.5, loc="upper left", framealpha=0.93,
+                     edgecolor="#cccccc", fancybox=False, labelspacing=1.8,
+                     handletextpad=1.4, borderpad=1.1)
+    leg.get_title().set_fontfamily(FONT)
+    for txt in leg.get_texts():
+        txt.set_fontfamily(FONT)
     ax1.xaxis.set_major_formatter(FormatStrFormatter("%.4f"))
     ax1.yaxis.set_major_formatter(FormatStrFormatter("%.4f"))
-    ax1.set_xlabel("Longitude (\u00b0E)", fontsize=10.5, fontfamily=FONT, labelpad=8)
-    ax1.set_ylabel("Latitude (\u00b0N)",  fontsize=10.5, fontfamily=FONT, labelpad=8)
+    ax1.set_xlabel("Longitude (°E)", fontsize=10.5, fontfamily=FONT, labelpad=8)
+    ax1.set_ylabel("Latitude (°N)", fontsize=10.5, fontfamily=FONT, labelpad=8)
     ax1.tick_params(labelsize=8.5)
-    ax1.set_title(
-        "Spatial Distribution and Data Completeness of the NUS Campus\n"
-        "Meteorological Observation Network (2025)",
-        fontsize=12.5, fontfamily=FONT, fontweight="bold", pad=16, loc="left"
-    )
+    ax1.set_title("Spatial Distribution and Data Completeness of the NUS Campus\n"
+                  "Meteorological Observation Network (2025)",
+                  fontsize=12.5, fontfamily=FONT, fontweight="bold", pad=16, loc="left")
     fig_map.tight_layout()
 
-    # ── Fig 2 — Monthly Heatmap ───────────────────────────────────────────────
-    matrix = pd.DataFrame(
-        {ws: [monthly_data[ws][m] for m in range(1, 13)] for ws in stations},
-        index=MONTH_ABBR
-    ).T
-    overall_vals = [station_meta_local[ws]["overall"] for ws in stations]
-    row_order = [stations[i] for i in np.argsort(overall_vals)[::-1]]
-    matrix = matrix.loc[row_order]
+    # ── Fig. 4: monthly heatmap with an "Overall" row ────────────────────────
+    no_data = 15
+    matrix = pd.DataFrame({ws: [monthly[ws][m] for m in range(1, 13)] for ws in stations},
+                          index=MONTH_ABBR)
+    mako_nd = copy.copy(MAKO); mako_nd.set_bad("#d4d4d4")
+    masked = np.ma.masked_where(matrix.values < no_data, matrix.values)
+    overall_row = np.array([[overall[ws] for ws in stations]])
 
-    mako_nd = copy.copy(MAKO)
-    mako_nd.set_bad("#d4d4d4")
-    masked = np.ma.masked_where(matrix.values < 5, matrix.values)
-
-    fig_heat, ax2 = plt.subplots(figsize=(14, 12))
+    fig_heat, (ax3, ax4) = plt.subplots(2, 1, figsize=(15, 5.5), sharex=True,
+                                        gridspec_kw={"height_ratios": [1, 12]},
+                                        layout="constrained")
     fig_heat.patch.set_facecolor("white")
-    im = ax2.imshow(masked, aspect="auto", cmap=mako_nd,
-                    vmin=35, vmax=100, interpolation="nearest", alpha=0.92)
+    ax3.imshow(overall_row, aspect="auto", cmap=mako_nd, vmin=30, vmax=100,
+               interpolation="nearest", alpha=0.92)
+    ax3.set_yticks(range(1)); ax3.set_yticklabels(["Overall"], fontsize=12, fontfamily=FONT)
+    ax3.set_xticks(np.arange(-0.5, len(stations), 1), minor=True)
+    ax3.xaxis.set_ticks_position("none")
+    ax3.grid(which="minor", color="white", linewidth=1.0)
+    ax3.tick_params(which="minor", length=0)
+    for sp in ax3.spines.values():
+        sp.set_visible(False)
+    for j in range(len(stations)):
+        v = overall_row[0, j]
+        ax3.text(j, 0, f"{v:.0f}", ha="center", va="center", fontsize=10, fontweight="bold",
+                 color="white" if v < 70 else "#1a1a1a", fontfamily=FONT)
 
-    ax2.set_xticks(range(12)); ax2.set_xticklabels(MONTH_ABBR, fontsize=9.5, fontfamily=FONT)
-    ax2.set_yticks(range(len(row_order)))
-    ax2.set_yticklabels(row_order, fontsize=8.5, fontfamily=FONT)
-
-    for i in range(len(row_order)):
-        for j in range(12):
-            v = matrix.values[i, j]
-            if v < 5:
-                ax2.text(j, i, "N/A", ha="center", va="center",
-                         fontsize=5.8, fontweight="bold", color="#555555", fontfamily=FONT)
-            elif v < 95:
-                ax2.text(j, i, f"{v:.0f}%", ha="center", va="center",
-                         fontsize=6.0, fontweight="bold",
-                         color="white" if v < 75 else "#1a1a1a", fontfamily=FONT)
-
-    ax2.set_xticks(np.arange(-0.5, 12, 1), minor=True)
-    ax2.set_yticks(np.arange(-0.5, len(row_order), 1), minor=True)
-    ax2.grid(which="minor", color="white", linewidth=1.0)
-    ax2.tick_params(which="minor", length=0)
-    cbar2 = fig_heat.colorbar(im, ax=ax2, fraction=0.022, pad=0.015, aspect=35)
-    cbar2.set_label("Monthly Data Completeness (%)", fontsize=10,
+    im = ax4.imshow(masked, aspect="auto", cmap=mako_nd, vmin=30, vmax=100,
+                    interpolation="nearest", alpha=0.92)
+    ax4.set_yticks(range(12)); ax4.set_yticklabels(matrix.index, fontsize=12, fontfamily=FONT)
+    ax4.set_xticks(range(len(stations)))
+    ax4.set_xticklabels([ws[2:] for ws in stations], fontsize=12, fontfamily=FONT)
+    ax4.set_yticks(np.arange(-0.5, 12, 1), minor=True)
+    ax4.set_xticks(np.arange(-0.5, len(stations), 1), minor=True)
+    ax4.grid(which="minor", color="white", linewidth=1.0)
+    ax4.tick_params(which="minor", length=0)
+    for sp in ax4.spines.values():
+        sp.set_linewidth(0.5)
+    cbar3 = fig_heat.colorbar(im, fraction=0.022, pad=0.015, aspect=35)
+    cbar3.set_label("Mean per-variable completeness (%)", fontsize=12,
                     fontfamily=FONT, labelpad=10)
-    cbar2.ax.tick_params(labelsize=8.5)
-    ax2.legend(handles=[Patch(facecolor="#d4d4d4", edgecolor="#aaaaaa",
-                               linewidth=0.5, label="No data (<5%)")],
-               loc="lower right", fontsize=8.5, framealpha=0.93,
-               edgecolor="#cccccc", fancybox=False)
-    ax2.set_xlabel("Month", fontsize=10.5, fontfamily=FONT, labelpad=10)
-    ax2.set_ylabel("Weather Station", fontsize=10.5, fontfamily=FONT, labelpad=10)
-    ax2.set_title(
-        "Monthly Data Completeness Across the NUS Campus\n"
-        "Meteorological Observation Network (2025)",
-        fontsize=12.5, fontfamily=FONT, fontweight="bold", pad=16, loc="left"
-    )
-    fig_heat.tight_layout()
+    cbar3.ax.tick_params(labelsize=10)
+    for sp in cbar3.ax.spines.values():
+        sp.set_linewidth(0.5)
+    fig_heat.legend(handles=[Patch(facecolor="#d4d4d4", edgecolor="#aaaaaa", linewidth=0.5,
+                                   label=f"N/A (<{no_data}%)")],
+                    loc="lower right", bbox_to_anchor=(1.025, 0.03), fontsize=8,
+                    framealpha=0, edgecolor="#cccccc", fancybox=False, prop={"family": FONT})
+    ax4.set_ylabel("Month", fontsize=12, fontfamily=FONT, labelpad=8)
+    ax4.set_xlabel("Weather Station", fontsize=12, fontfamily=FONT, labelpad=8)
+    fig_heat.suptitle("Monthly Mean Per-Variable Completeness —\n"
+                      "NUS Campus Meteorological Observation Network (2025)",
+                      fontsize=12.5, fontfamily=FONT, fontweight="bold", ha="left", x=0.05)
 
     if save_dir:
-        fig_map.savefig( os.path.join(save_dir, "completeness_map.png"),  dpi=200, bbox_inches="tight")
-        fig_heat.savefig(os.path.join(save_dir, "completeness_heat.png"), dpi=200, bbox_inches="tight")
-
+        _save(fig_map, os.path.join(save_dir, "completeness_map.png"))
+        _save(fig_heat, os.path.join(save_dir, "completeness_heat.png"))
     return fig_map, fig_heat
 
 
 def plot_climatology(save_path: str = None):
-    """Diurnal × seasonal climatology heatmap (5 variables, month × hour).
+    """Diurnal and seasonal climatology, ground-level and rooftop (paper Fig. 6).
+
+    Month x hour heatmaps of five variables, averaged over the ground-level
+    stations (left) and the rooftop stations (right), from the raw data. Both
+    columns share one colour scale per variable.
 
     Parameters
     ----------
     save_path : str, optional
-        File path to save the figure (PNG or PDF).
+        File path to save the figure (PNG or PDF); the folder is created if
+        it does not exist.
 
     Returns
     -------
     matplotlib.figure.Figure
     """
     _apply_style()
-    long_df = load_all()
-    long_df = long_df.copy()
+    long_df = load_all().copy()
     long_df.loc[long_df["station"] == PRESSURE_OUTLIER, "AtmPress Ave (hPa)"] = np.nan
-
     if not isinstance(long_df.index, pd.DatetimeIndex):
         long_df.index = pd.to_datetime(long_df.index)
     long_df["month"] = long_df.index.month
     long_df["hour"]  = long_df.index.hour
+    ground = long_df["Type"] == "Ground"
 
-    fig, axes = plt.subplots(5, 1, figsize=(18, 14))
-    fig.patch.set_facecolor("white")
-
-    for ax, (col, label, unit, lc, cmap) in zip(axes, VARS_NO_WD):
-        climate = long_df.groupby(["month", "hour"])[col].mean().unstack(level="hour")
-        vmin_v  = climate.values.min()
-        vmax_v  = climate.values.max()
-        if col == "GlobalRad Ave (W/m2)":
-            vmin_v = 0
-
-        im = ax.imshow(climate.values, aspect="auto", cmap=cmap,
-                       vmin=vmin_v, vmax=vmax_v,
-                       interpolation="bilinear", origin="upper")
-
-        ax.set_xticks(np.arange(-0.5, 24, 1), minor=True)
-        ax.set_yticks(np.arange(-0.5, 12, 1), minor=True)
-        ax.grid(which="minor", color="white", linewidth=0.4)
-        ax.tick_params(which="minor", length=0)
-        ax.set_xticks(range(0, 24, 3))
-        ax.set_xticklabels([f"{h:02d}h" for h in range(0, 24, 3)],
-                           fontsize=7.5, fontfamily=FONT)
-        ax.set_yticks(range(12))
-        ax.set_yticklabels(MONTH_ABBR, fontsize=8, fontfamily=FONT)
-
-        cb = fig.colorbar(im, ax=ax, fraction=0.018, pad=0.01, aspect=14)
-        cb.set_label(unit, fontsize=7.5, fontfamily=FONT, labelpad=5)
-        cb.ax.tick_params(labelsize=7)
-        ax.set_title(label, fontsize=9.5, fontfamily=FONT,
-                     fontweight="bold", loc="left", pad=5)
-        ax.set_ylabel("Month", fontsize=8, fontfamily=FONT, labelpad=4)
-        ax.tick_params(labelsize=7.5)
-        for sp in ax.spines.values():
-            sp.set_linewidth(0.4)
-
-    axes[-1].set_xlabel("Hour of Day", fontsize=9, fontfamily=FONT, labelpad=6)
-    fig.suptitle(
-        "Diurnal and Seasonal Climatology \u2014 NUS Campus Meteorological Network (2025)\n"
-        "Mean across 40 stations",
-        fontsize=12, fontfamily=FONT, fontweight="bold", y=1.005
-    )
-    fig.tight_layout(h_pad=1.2)
+    with plt.rc_context({"axes.linewidth": 0.6, "xtick.major.width": 0.6,
+                         "ytick.major.width": 0.6}):
+        fig, axes = plt.subplots(5, 2, figsize=(15, 12), sharey=True)
+        fig.patch.set_facecolor("white")
+        for (ax, ax2), (col, label, unit, lc, cmap) in zip(axes, VARS_NO_WD):
+            climate = long_df.groupby(["month", "hour"])[col].mean().unstack(level="hour")
+            clim_g = long_df[ground].groupby(["month", "hour"])[col].mean().unstack(level="hour")
+            clim_r = long_df[~ground].groupby(["month", "hour"])[col].mean().unstack(level="hour")
+            vmin, vmax = climate.values.min(), climate.values.max()
+            if col == "GlobalRad Ave (W/m2)":
+                vmin = 0  # night anchors to black
+            im = ax.imshow(clim_g.values, aspect="auto", cmap=cmap, vmin=vmin, vmax=vmax)
+            ax2.imshow(clim_r.values, aspect="auto", cmap=cmap, vmin=vmin, vmax=vmax)
+            for a in (ax, ax2):
+                a.set_xticks(np.arange(-0.5, 24, 1), minor=True)
+                a.set_yticks(np.arange(-0.5, 12, 1), minor=True)
+                a.grid(which="minor", color="white", linewidth=0.4, linestyle="-")
+                a.tick_params(which="minor", length=0)
+                a.set_xticks(range(0, 24, 3))
+                a.set_xticklabels([f"{h:02d}h" for h in range(0, 24, 3)],
+                                  fontsize=8, fontfamily=FONT)
+            ax.set_yticks(range(12))
+            ax.set_yticklabels(MONTH_ABBR, fontsize=8, fontfamily=FONT)
+            ax2.yaxis.set_ticks_position("none")
+            cb = fig.colorbar(im, ax=ax2, fraction=0.018, pad=0.01)
+            cb.set_label(unit, fontsize=10, fontfamily=FONT, labelpad=5)
+            cb.ax.tick_params(labelsize=9)
+            for sp in cb.ax.spines.values():
+                sp.set_linewidth(0.3)
+            ax.set_title(label + " - Ground", fontsize=10, fontfamily=FONT,
+                         fontweight="bold", loc="left", pad=5)
+            ax2.set_title(label + " - Rooftop", fontsize=10, fontfamily=FONT,
+                          fontweight="bold", loc="left", pad=5)
+            ax.set_ylabel("Month", fontsize=10, fontfamily=FONT)
+            ax.tick_params(labelsize=8)
+            for sp in ax.spines.values():
+                sp.set_linewidth(0.4)
+        fig.supxlabel("Hour of Day", fontsize=10, fontfamily=FONT)
+        fig.suptitle("Diurnal and Seasonal Climatology — NUS Campus Meteorological "
+                     "Network (2025)\nMean across 40 stations",
+                     fontsize=12, fontfamily=FONT, fontweight="bold", y=1.005)
+        fig.tight_layout(h_pad=1.2)
     _save(fig, save_path)
     return fig
 
@@ -501,6 +543,7 @@ def plot_radials(save_path: str = None):
             val       = grp_m[col].values,
             vmin      = vmin_v, vmax = vmax_v, lc = lc,
             std       = grp_s[col].values,
+            s         = 1.0, alpha = 0.70,
             show_mean = cfg["show_mean"],
             mean_mask = mean_mask,
             mean_color= mc,
@@ -515,22 +558,26 @@ def plot_radials(save_path: str = None):
             _add_panel_legend(ax, lc, cfg["line_label"],
                               has_band=cfg["has_band"], mean_color=mc)
 
-    # Shared hour-of-day colorbar
+    # Shared hour-of-day colorbar, right-hand side (as in the paper)
     sm = plt.cm.ScalarMappable(cmap=_HOUR_CMAP, norm=Normalize(vmin=0, vmax=23))
     sm.set_array([])
-    cbar = fig.colorbar(sm, ax=axs,
-                        orientation="horizontal", fraction=0.025,
-                        pad=0.08, aspect=50)
-    cbar.set_label("Hour of Day", fontsize=9, fontfamily=FONT, labelpad=5)
+    cax = fig.add_axes([0.93, 0.14, 0.013, 0.72])
+    cbar = fig.colorbar(sm, cax=cax)
+    cbar.set_label("Hour of Day", fontsize=8.5, fontfamily=FONT, labelpad=8)
     cbar.set_ticks([0, 6, 12, 18, 23])
     cbar.set_ticklabels(["00h", "06h", "12h", "18h", "23h"])
     cbar.ax.tick_params(labelsize=8)
+    for sp in cbar.ax.spines.values():
+        sp.set_linewidth(0.3)
 
     fig.suptitle(
-        "Annual Radial Climatology \u2014 NUS Campus Meteorological Network (2025)\n"
-        "Each point = hourly network mean; colour = hour of day",
+        "Annual Weather Radials \u2014 NUS Campus Meteorological Network (2025)\n"
+        "40 stations  \u00b7  Jan at top, clockwise  \u00b7  Dot colour = hour of day  \u00b7  "
+        "Radius = variable value  \u00b7  Dashed circles = data min / max",
         fontsize=11, fontfamily=FONT, fontweight="bold", y=1.01
     )
+    fig.subplots_adjust(left=0.03, right=0.91, top=0.92, bottom=0.05,
+                        hspace=0.18, wspace=0.08)
     _save(fig, save_path)
     return fig
 
@@ -544,13 +591,21 @@ def plot_imputation_examples(save_path: str = None):
     Parameters
     ----------
     save_path : str, optional
-        File path to save the figure.
+        File path to save the figure; the folder is created if it does not
+        exist.
 
     Returns
     -------
     matplotlib.figure.Figure
     """
-    _apply_style()
+    # The paper's Fig. 10 uses matplotlib's default style, saved at 200 dpi.
+    with plt.style.context("default"):
+        fig = _imputation_examples_figure()
+        _save(fig, save_path, dpi=200)
+    return fig
+
+
+def _imputation_examples_figure():
 
     VAR_COLOR = {
         "AirTemp Ave (C)":      "#bd0026",
@@ -646,11 +701,10 @@ def plot_imputation_examples(save_path: str = None):
         handles=[
             Line2D([0], [0], color="#888888", lw=1.5, linestyle="-",  label="Observed"),
             Line2D([0], [0], color="#888888", lw=1.3, linestyle="--", label="Imputed \u2014 XGBoost spatial regression"),
-            mpatches.Patch(facecolor=COL_FILL, edgecolor="#aaaaaa",   label="Gap region"),
+            mpatches.Patch(facecolor=COL_FILL, edgecolor="#aac4de",   label="Gap region"),
         ],
-        loc="lower center", ncol=3, fontsize=8.5, frameon=True,
+        loc="lower center", ncol=2, fontsize=8.5, frameon=True,
         bbox_to_anchor=(0.5, -0.04)
     )
     fig.suptitle("Representative gap-fill examples", fontsize=11, y=1.01)
-    _save(fig, save_path)
     return fig
